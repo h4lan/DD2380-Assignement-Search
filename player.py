@@ -52,6 +52,10 @@ class PlayerControllerMinimax(PlayerController):
             # Execute next action
             self.sender({"action": best_move, "search_time": None})
 
+    def utility(self, node: Node):
+        scores = node.state.get_player_scores()
+        return scores[0] - scores[1] 
+
     def simple_eval_func(self, node : Node):
         scores = node.state.get_player_scores()
         return scores[0] - scores[1] 
@@ -92,30 +96,32 @@ class PlayerControllerMinimax(PlayerController):
         # Initialize the children with compute_and_get_children()
         children = node.compute_and_get_children()
 
-        if not children or remaining_depth == 0:
-            # score = node.state.player_scores.get(0)
-            print("Terminal or cutoff", file=sys.stderr)
-            return node
+        if not children:
+            # print("Termiial", file=sys.stderr)
+            return (node, self.utility(node))
+        elif remaining_depth == 0:
+            # print("Cutoff", file=sys.stderr)
+            return (node, eval_func(node))
 
         else:
-            self.print_nodes(children, eval_func)
+            # self.print_nodes(children, eval_func)
 
-            # TODO: return value instead of node
-            bestPossible = None
+            best_possible, best_value = None, None
             if player == 0: # MAX player
+                best_value = float("inf")
                 for child in children:
-                    v = self.minimax(child, 1, remaining_depth-1, eval_func)
-                    if bestPossible == None or eval_func(bestPossible) < eval_func(v):
-                        bestPossible = child
-                return bestPossible
-                
+                    _, value = self.minimax(child, 1, remaining_depth-1, eval_func)
+                    if best_possible == None or best_value < value:
+                        best_possible, best_value = child, value
+            
             else: # MIN player
+                best_value = -float("inf")
                 for child in children:
-                    v = self.minimax(child, 0, remaining_depth-1, eval_func)
-                    if bestPossible == None or eval_func(bestPossible) > eval_func(v):
-                        bestPossible = child
-                return bestPossible
-
+                    _, value = self.minimax(child, 0, remaining_depth-1, eval_func)
+                    if best_possible == None or best_value > value:
+                        best_possible, best_value = child, value
+            
+            return (best_possible, best_value)
 
     def search_best_next_move(self, initial_tree_node):
         """
@@ -128,7 +134,7 @@ class PlayerControllerMinimax(PlayerController):
         """
 
         print("Computing...", file=sys.stderr)
-        next_node = self.minimax(initial_tree_node, 0, 2, self.eval_func_2) # we start off with depth only 2
+        next_node, _ = self.minimax(initial_tree_node, 0, 2, self.eval_func_2) # we start off with depth only 2
         return ACTION_TO_STR[next_node.move]
 
         # random_move = random.randrange(5)
