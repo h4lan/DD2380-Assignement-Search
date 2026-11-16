@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import sys
+import math
 import random
 
 from fishing_game_core.game_tree import Node
@@ -50,6 +52,71 @@ class PlayerControllerMinimax(PlayerController):
             # Execute next action
             self.sender({"action": best_move, "search_time": None})
 
+    def simple_eval_func(self, node : Node):
+        scores = node.state.get_player_scores()
+        return scores[0] - scores[1] 
+
+    def eval_func_2(self, node : Node, threshold = 15):
+        # TODO threshold should be a function
+        max_distance = 19 + 20 # TODO fix magic number 
+        hook_position = node.state.get_hook_positions()[0]
+        fish_positions = node.state.get_fish_positions()
+        fish_scores = node.state.get_fish_scores()
+
+        eval = 0
+        for fish_number in fish_positions:
+            distance = abs(hook_position[0] - fish_positions[fish_number][0]) + abs(hook_position[1] -  fish_positions[fish_number][1])
+            if distance < threshold:
+                eval += fish_scores[fish_number] * (max_distance - distance)
+
+        return eval
+
+    def print_nodes(self, nodes : list, heuristic):
+        str = "Possible next moves:\n"
+        
+        if nodes:
+            for node in nodes:
+                str += f"move={ACTION_TO_STR[node.move]}, heuristic={heuristic(node)}\n"
+
+        print(str, file=sys.stderr)        
+
+    def minimax(self, node : Node, player : int, remaining_depth, eval_func):
+        """_summary_
+        Minimax implementation with cut-off
+        Args:
+            node (_Node_): _description_
+            player (_type_): _description_
+            remaining_depth (_int_): _description_
+        """
+
+        # Initialize the children with compute_and_get_children()
+        children = node.compute_and_get_children()
+
+        if not children or remaining_depth == 0:
+            # score = node.state.player_scores.get(0)
+            print("Terminal or cutoff", file=sys.stderr)
+            return node
+
+        else:
+            self.print_nodes(children, eval_func)
+
+            # TODO: return value instead of node
+            bestPossible = None
+            if player == 0: # MAX player
+                for child in children:
+                    v = self.minimax(child, 1, remaining_depth-1, eval_func)
+                    if bestPossible == None or eval_func(bestPossible) < eval_func(v):
+                        bestPossible = child
+                return bestPossible
+                
+            else: # MIN player
+                for child in children:
+                    v = self.minimax(child, 0, remaining_depth-1, eval_func)
+                    if bestPossible == None or eval_func(bestPossible) > eval_func(v):
+                        bestPossible = child
+                return bestPossible
+
+
     def search_best_next_move(self, initial_tree_node):
         """
         Use minimax (and extensions) to find best possible next move for player 0 (green boat)
@@ -60,10 +127,9 @@ class PlayerControllerMinimax(PlayerController):
         :rtype: str
         """
 
-        # EDIT THIS METHOD TO RETURN BEST NEXT POSSIBLE MODE USING MINIMAX ###
+        print("Computing...", file=sys.stderr)
+        next_node = self.minimax(initial_tree_node, 0, 2, self.eval_func_2) # we start off with depth only 2
+        return ACTION_TO_STR[next_node.move]
 
-        # NOTE: Don't forget to initialize the children of the current node
-        #       with its compute_and_get_children() method!
-
-        random_move = random.randrange(5)
-        return ACTION_TO_STR[random_move]
+        # random_move = random.randrange(5)
+        # return ACTION_TO_STR[random_move]
