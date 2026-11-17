@@ -30,6 +30,7 @@ class PlayerControllerMinimax(PlayerController):
 
     def __init__(self):
         super(PlayerControllerMinimax, self).__init__()
+        self.max_depth = 2 # change this to test the evalutation depth
 
     def player_loop(self):
         """
@@ -60,27 +61,53 @@ class PlayerControllerMinimax(PlayerController):
         scores = node.state.get_player_scores()
         return scores[0] - scores[1] 
 
-    def eval_func_2(self, node : Node, threshold = 15):
-        # TODO threshold should be a function
-        max_distance = 19 + 20 # TODO fix magic number 
-        hook_position = node.state.get_hook_positions()[0]
+    def score_distance_eval_func(self, node : Node):
+        def move_distance(t1, t2):
+            y_dist = abs(t1[1] - t2[1])
+            x_dist = abs(t1[0] - t2[0])
+            wrap_around_x_dist = 20 - max(t1[0], t2[0]) + min(t1[0], t2[0]) 
+
+            return min(x_dist, wrap_around_x_dist) + y_dist
+        
+        # TODO threshold should be a function, not constant
+
+        scores = node.state.get_player_scores()
+        hook_positions = node.state.get_hook_positions()
         fish_positions = node.state.get_fish_positions()
         fish_scores = node.state.get_fish_scores()
+        caught_fish = node.state.get_caught()
 
-        eval = 0
+        max_fish_distances = (0,0)
+        min_fish_distances = (float("inf"), float("inf"))
+        fish_distances = {}
         for fish_number in fish_positions:
-            distance = abs(hook_position[0] - fish_positions[fish_number][0]) + abs(hook_position[1] -  fish_positions[fish_number][1])
-            if distance < threshold:
-                eval += fish_scores[fish_number] * (max_distance - distance)
+            dist = (move_distance(hook_positions[0], fish_positions[fish_number]),
+                    move_distance(hook_positions[1], fish_positions[fish_number]))
+            
+            fish_distances[fish_number] = dist
+            max_fish_distances = (max(max_fish_distances[0], dist[0]), max(max_fish_distances[1], dist[1]))
+            min_fish_distances = (min(min_fish_distances[0], dist[0]), min(min_fish_distances[1], dist[1]))
 
+        # Take player scores in account through the score difference
+        eval = scores[0] - scores[1] # score weight = 1
+
+        # Take fish positions in account through their distance from the hook
+        for fish_number in fish_distances:
+            dist = fish_distances[fish_number]
+            # The caught fish are not instantly removed from the state: we must do it manually
+            if (fish_number != caught_fish[1]):
+                eval += fish_scores[fish_number] / (dist[0] + 1)
+            if (fish_number != caught_fish[0]):
+                eval += -fish_scores[fish_number] / (dist[1] + 1)
+        
         return eval
 
-    def print_nodes(self, nodes : list, heuristic):
+    def print_values(self, values):
         str = "Possible next moves:\n"
         
-        if nodes:
-            for node in nodes:
-                str += f"move={ACTION_TO_STR[node.move]}, heuristic={heuristic(node)}\n"
+        if values:
+            for move, value in enumerate(values):
+                str += f"(move={ACTION_TO_STR[move]}, value={value}) "
 
         print(str, file=sys.stderr)        
 
@@ -93,31 +120,40 @@ class PlayerControllerMinimax(PlayerController):
             remaining_depth (_int_): _description_
         """
 
-        # Initialize the children with compute_and_get_children()
-        children = node.compute_and_get_children()
-
-        if not children:
-            # print("Termiial", file=sys.stderr)
-            return (node, self.utility(node))
-        elif remaining_depth == 0:
+        # Cutoff
+        if remaining_depth == 0:
             # print("Cutoff", file=sys.stderr)
             return (node, eval_func(node))
 
+        # Initialize the children with compute_and_get_children()
+        children = node.compute_and_get_children()
+        if not children:
+            # print("Terminal", file=sys.stderr)
+            return (node, self.utility(node))
+
         else:
-            # self.print_nodes(children, eval_func)
+            children_values = []
 
             best_possible, best_value = None, None
             if player == 0: # MAX player
-                best_value = float("inf")
-                for child in children:
-                    _, value = self.minimax(child, 1, remaining_depth-1, eval_func)
-                    if best_possible == None or best_value < value:
-                        best_possible, best_value = child, value
-            
-            else: # MIN player
                 best_value = -float("inf")
                 for child in children:
+                    _, value = self.minimax(child, 1, remaining_depth-1, eval_func)
+
+                    if remaining_depth == self.max_depth:
+                        children_values.append(value)
+                    
+                    if best_possible == None or best_value < value:
+                        best_possible, best_value = child, value
+
+                if remaining_depth == self.max_depth:
+                    self.print_values(children_values)
+            
+            else: # MIN player
+                best_value = float("inf")
+                for child in children:
                     _, value = self.minimax(child, 0, remaining_depth-1, eval_func)
+
                     if best_possible == None or best_value > value:
                         best_possible, best_value = child, value
             
@@ -133,9 +169,6 @@ class PlayerControllerMinimax(PlayerController):
         :rtype: str
         """
 
-        print("Computing...", file=sys.stderr)
-        next_node, _ = self.minimax(initial_tree_node, 0, 2, self.eval_func_2) # we start off with depth only 2
+        next_node, _ = self.minimax(initial_tree_node, 0, self.max_depth, self.eval_func_2) # we start off with depth only 2
+        print(f"Next move: {ACTION_TO_STR[next_node.move]}", file=sys.stderr)
         return ACTION_TO_STR[next_node.move]
-
-        # random_move = random.randrange(5)
-        # return ACTION_TO_STR[random_move]
