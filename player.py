@@ -63,14 +63,21 @@ class PlayerControllerMinimax(PlayerController):
 
     def score_distance_eval_func(self, node : Node):
         def move_distance(t1, t2):
+            """_summary_
+
+            Args:
+                t1 (_type_): _description_
+                t2 (_type_): _description_
+
+            Returns:
+                _type_: _description_
+            """
             y_dist = abs(t1[1] - t2[1])
             x_dist = abs(t1[0] - t2[0])
             wrap_around_x_dist = 20 - max(t1[0], t2[0]) + min(t1[0], t2[0]) 
 
             return min(x_dist, wrap_around_x_dist) + y_dist
         
-        # TODO threshold should be a function, not constant
-
         scores = node.state.get_player_scores()
         hook_positions = node.state.get_hook_positions()
         fish_positions = node.state.get_fish_positions()
@@ -140,14 +147,14 @@ class PlayerControllerMinimax(PlayerController):
                 for child in children:
                     _, value = self.minimax(child, 1, remaining_depth-1, eval_func)
 
-                    if remaining_depth == self.max_depth:
-                        children_values.append(value)
+                    # if remaining_depth == self.max_depth:
+                    #     children_values.append(value)
                     
                     if best_possible == None or best_value < value:
                         best_possible, best_value = child, value
 
-                if remaining_depth == self.max_depth:
-                    self.print_values(children_values)
+                # if remaining_depth == self.max_depth:
+                #     self.print_values(children_values)
             
             else: # MIN player
                 best_value = float("inf")
@@ -169,6 +176,6 @@ class PlayerControllerMinimax(PlayerController):
         :rtype: str
         """
 
-        next_node, _ = self.minimax(initial_tree_node, 0, self.max_depth, self.eval_func_2) # we start off with depth only 2
-        print(f"Next move: {ACTION_TO_STR[next_node.move]}", file=sys.stderr)
+        next_node, _ = self.minimax(initial_tree_node, 0, self.max_depth, self.score_distance_eval_func) # we start off with depth only 2
+        # print(f"Next move: {ACTION_TO_STR[next_node.move]}", file=sys.stderr)
         return ACTION_TO_STR[next_node.move]
