@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 #.\.venv\Scripts\python.exe main.py settings.yml
 import sys
+import numpy as np
+#########ADDED
+from time import perf_counter
+############
 
 from fishing_game_core.game_tree import Node
 from fishing_game_core.player_utils import PlayerController
@@ -232,6 +236,94 @@ class PlayerControllerMinimax(PlayerController):
 
             return (best_possible, best_value)
 
+    ######################
+
+    ####################### NEW PART B --> TO MODIFY
+    def minimax_alpha_beta_timed(self, node, player, remaining_depth, eval_func, deadline,alpha=float("-inf"), beta=float("inf")):
+        """Run alpha-beta at one depth, checking the deadline at each node.""" 
+
+        if perf_counter() >= deadline:
+            raise TimeoutError
+
+        # The game tree ends when no fish or no observations remain.
+        if not node.state.get_fish_positions() or node.depth >= len(node.observations):
+            return node, self.utility(node)
+
+        # Evaluate the position before generating another level.
+        if remaining_depth == 0:
+            return node, eval_func(node)
+
+        children = node.compute_and_get_children()
+
+        # A blocked horizontal move produces the same state as "stay".
+        current_x = node.state.get_hook_positions()[player][0]
+        children = [
+            child for child in children
+            if ACTION_TO_STR[child.move] not in ("left", "right")
+            or child.state.get_hook_positions()[player][0] != current_x
+        ]
+
+        if not children:
+            return node, self.utility(node)
+
+        best_node = None
+
+        if player == 0:  # MAX: green
+            best_value = float("-inf")
+
+            for child in children:
+                _, value = self.minimax_alpha_beta_timed(
+                    child, 1, remaining_depth - 1,
+                    eval_func, deadline, alpha, beta
+                )
+
+                if best_node is None or value > best_value:
+                    best_node, best_value = child, value
+
+                alpha = max(alpha, best_value)
+                if alpha >= beta:
+                    break
+
+        else:  # MIN: red
+            best_value = float("inf")
+
+            for child in children:
+                _, value = self.minimax_alpha_beta_timed(
+                    child, 0, remaining_depth - 1,
+                    eval_func, deadline, alpha, beta
+                )
+
+                if best_node is None or value < best_value:
+                    best_node, best_value = child, value
+
+                beta = min(beta, best_value)
+                if alpha >= beta:
+                    break
+
+        return best_node, best_value
+    
+    def iterative_deepening(self, node):
+
+        """Return the best move from the last completed search."""
+        # perf_counter measure the time
+        deadline = perf_counter() + 0.060
+
+        # In case even depth 1 cannot finish: if the fish is caught, the hook  goes up by default, otherwise the move is stay
+        best_move = "up" if node.state.get_caught()[0] is not None else "stay"
+
+        #try different dephts
+        for depth in range(1, len(node.observations) + 1):
+            try:
+                best_node, _ = self.minimax_alpha_beta_timed(node, 0, depth, self.score_distance_eval_func, deadline)
+            except TimeoutError: #If time finishes interrupt
+                break
+
+            if best_node.move is None:
+                break
+
+            best_move = ACTION_TO_STR[best_node.move]
+
+        return best_move
     ######################
 
     def search_best_next_move(self, initial_tree_node):
