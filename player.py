@@ -30,7 +30,7 @@ class PlayerControllerMinimax(PlayerController):
 
     def __init__(self):
         super(PlayerControllerMinimax, self).__init__()
-        self.max_depth = 2 # change this to test the evalutation depth
+        self.max_depth = 3 # change this to test different depths
 
     def player_loop(self):
         """
@@ -84,6 +84,7 @@ class PlayerControllerMinimax(PlayerController):
         fish_scores = node.state.get_fish_scores()
         caught_fish = node.state.get_caught()
 
+        # Computing distance between the fish and the players' hooks
         max_fish_distances = (0,0)
         min_fish_distances = (float("inf"), float("inf"))
         fish_distances = {}
@@ -101,11 +102,10 @@ class PlayerControllerMinimax(PlayerController):
         # Take fish positions in account through their distance from the hook
         for fish_number in fish_distances:
             dist = fish_distances[fish_number]
-            # The caught fish are not instantly removed from the state: we must do it manually
-            if (fish_number != caught_fish[1]):
-                eval += fish_scores[fish_number] / (dist[0] + 1)
-            if (fish_number != caught_fish[0]):
-                eval += -fish_scores[fish_number] / (dist[1] + 1)
+            # Fish caught be the other player should not count
+            # Small value to break the tie: even if the last fish is caught, the cases where MAX is closer to it are better
+            eval += (fish_scores[fish_number] if fish_number != caught_fish[1] else 0.001) / (dist[0] + 1)
+            eval += -(fish_scores[fish_number] if fish_number != caught_fish[0] else 0.001) / (dist[1] + 1) 
         
         return eval
 
@@ -127,19 +127,19 @@ class PlayerControllerMinimax(PlayerController):
             remaining_depth (_int_): _description_
         """
 
-        # Cutoff
-        if remaining_depth == 0:
-            # print("Cutoff", file=sys.stderr)
-            return (node, eval_func(node))
-
         # Initialize the children with compute_and_get_children()
         children = node.compute_and_get_children()
         if not children:
-            # print("Terminal", file=sys.stderr)
             return (node, self.utility(node))
+
+        # Cutoff
+        if remaining_depth == 0:
+            return (node, eval_func(node))
 
         else:
             children_values = []
+
+            print(f"Depth = {self.max_depth - remaining_depth}", file = open("log.txt", "a"))
 
             best_possible, best_value = None, None
             if player == 0: # MAX player
@@ -147,14 +147,9 @@ class PlayerControllerMinimax(PlayerController):
                 for child in children:
                     _, value = self.minimax(child, 1, remaining_depth-1, eval_func)
 
-                    # if remaining_depth == self.max_depth:
-                    #     children_values.append(value)
-                    
                     if best_possible == None or best_value < value:
                         best_possible, best_value = child, value
 
-                # if remaining_depth == self.max_depth:
-                #     self.print_values(children_values)
             
             else: # MIN player
                 best_value = float("inf")
@@ -163,7 +158,7 @@ class PlayerControllerMinimax(PlayerController):
 
                     if best_possible == None or best_value > value:
                         best_possible, best_value = child, value
-            
+
             return (best_possible, best_value)
 
     def search_best_next_move(self, initial_tree_node):
@@ -177,5 +172,4 @@ class PlayerControllerMinimax(PlayerController):
         """
 
         next_node, _ = self.minimax(initial_tree_node, 0, self.max_depth, self.score_distance_eval_func) # we start off with depth only 2
-        # print(f"Next move: {ACTION_TO_STR[next_node.move]}", file=sys.stderr)
         return ACTION_TO_STR[next_node.move]
