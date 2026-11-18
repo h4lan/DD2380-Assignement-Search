@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 import sys
-import math
-import random
 
 from fishing_game_core.game_tree import Node
 from fishing_game_core.player_utils import PlayerController
@@ -62,15 +60,23 @@ class PlayerControllerMinimax(PlayerController):
         return scores[0] - scores[1] 
 
     def score_distance_eval_func(self, node : Node):
+        """_summary_
+        An evaluation function taking the player scores and
+        the remaining fish as features
+        
+        Args:
+            node (Node): The node to evaluate in its current state
+        """
         def move_distance(t1, t2):
             """_summary_
+            The minimum number of moves from t1 to t2 on the grid
 
             Args:
-                t1 (_type_): _description_
-                t2 (_type_): _description_
+                t1 (tuple): The first grid cell coordinates
+                t2 (tuple): The second grid cell coordinates
 
             Returns:
-                _type_: _description_
+                int: The distance from t1 to t2
             """
             y_dist = abs(t1[1] - t2[1])
             x_dist = abs(t1[0] - t2[0])
@@ -121,10 +127,11 @@ class PlayerControllerMinimax(PlayerController):
     def minimax(self, node : Node, player : int, remaining_depth, eval_func):
         """_summary_
         Minimax implementation with cut-off
+        
         Args:
-            node (_Node_): _description_
-            player (_type_): _description_
-            remaining_depth (_int_): _description_
+            node (Node): The node to explore from
+            player (int): An integer representing player A (0) or player B (1) 
+            remaining_depth (int): The remaining depth to explore before having to cut off
         """
 
         # Initialize the children with compute_and_get_children()
@@ -137,11 +144,8 @@ class PlayerControllerMinimax(PlayerController):
             return (node, eval_func(node))
 
         else:
-            children_values = []
-
-            print(f"Depth = {self.max_depth - remaining_depth}", file = open("log.txt", "a"))
-
             best_possible, best_value = None, None
+
             if player == 0: # MAX player
                 best_value = -float("inf")
                 for child in children:
@@ -150,7 +154,6 @@ class PlayerControllerMinimax(PlayerController):
                     if best_possible == None or best_value < value:
                         best_possible, best_value = child, value
 
-            
             else: # MIN player
                 best_value = float("inf")
                 for child in children:
@@ -171,5 +174,5 @@ class PlayerControllerMinimax(PlayerController):
         :rtype: str
         """
 
-        next_node, _ = self.minimax(initial_tree_node, 0, self.max_depth, self.score_distance_eval_func) # we start off with depth only 2
+        next_node, _ = self.minimax(initial_tree_node, 0, self.max_depth, self.score_distance_eval_func)
         return ACTION_TO_STR[next_node.move]
