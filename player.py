@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+#.\.venv\Scripts\python.exe main.py settings.yml
 import sys
 
 from fishing_game_core.game_tree import Node
@@ -62,10 +63,10 @@ class PlayerControllerMinimax(PlayerController):
     def score_distance_eval_func(self, node : Node):
         """_summary_
         An evaluation function taking the player scores and
-        the remaining fish as features
+        the remaining fish as features.
         
         Args:
-            node (Node): The node to evaluate in its current state
+            node (Node): The node to evaluate in its current state.
         """
         def move_distance(t1, t2):
             """_summary_
@@ -83,14 +84,16 @@ class PlayerControllerMinimax(PlayerController):
             wrap_around_x_dist = 20 - max(t1[0], t2[0]) + min(t1[0], t2[0]) 
 
             return min(x_dist, wrap_around_x_dist) + y_dist
+            #REMARK:We use the shortest horizontal distance because the 20-column grid wraps around at its left and right edges.   
         
+        # Read the state
         scores = node.state.get_player_scores()
         hook_positions = node.state.get_hook_positions()
         fish_positions = node.state.get_fish_positions()
         fish_scores = node.state.get_fish_scores()
         caught_fish = node.state.get_caught()
 
-        # Computing distance between the fish and the players' hooks
+        # Computing distance between the fish and the players' hooks : for each fish save the distance from green and red
         max_fish_distances = (0,0)
         min_fish_distances = (float("inf"), float("inf"))
         fish_distances = {}
@@ -102,7 +105,7 @@ class PlayerControllerMinimax(PlayerController):
             max_fish_distances = (max(max_fish_distances[0], dist[0]), max(max_fish_distances[1], dist[1]))
             min_fish_distances = (min(min_fish_distances[0], dist[0]), min(min_fish_distances[1], dist[1]))
 
-        # Take player scores in account through the score difference
+        # Take player scores in account through the score difference (base contribuition)
         eval = scores[0] - scores[1] # score weight = 1
 
         # Take fish positions in account through their distance from the hook
@@ -134,10 +137,24 @@ class PlayerControllerMinimax(PlayerController):
             remaining_depth (int): The remaining depth to explore before having to cut off
         """
 
+
         # Initialize the children with compute_and_get_children()
         children = node.compute_and_get_children()
+        
+        ##################ADDED: A blocked horizontal move produces the same state as "stay"
+        current_x = node.state.get_hook_positions()[player][0]
+
+        #Skip a child only if the move is left or right and the hook stays in the same column (blocked boat)
+        children = [
+            child for child in children
+                if ACTION_TO_STR[child.move] not in ("left", "right") 
+                or child.state.get_hook_positions()[player][0] !=current_x       
+        ]
+        #########################
+
         if not children:
             return (node, self.utility(node))
+        
 
         # Cutoff
         if remaining_depth == 0:
@@ -164,6 +181,59 @@ class PlayerControllerMinimax(PlayerController):
 
             return (best_possible, best_value)
 
+    #################ADDED ALPHA BETA PRUNING
+    def minimax_alpha_beta(self, node: Node, player: int, remaining_depth, eval_func, alpha=float("-inf"), beta=float("inf")):
+        
+        """Select the best move using minimax with a depth cutoff and alpha-beta pruning."""
+
+        children = node.compute_and_get_children()
+
+        current_x = node.state.get_hook_positions()[player][0]
+        children = [
+            child for child in children
+            if ACTION_TO_STR[child.move] not in ("left", "right")
+            or child.state.get_hook_positions()[player][0] != current_x
+        ]
+
+        if not children:
+            return node, self.utility(node)
+
+        if remaining_depth == 0:
+            return node, eval_func(node)
+
+        else:
+            best_possible, best_value = None, None
+
+            if player == 0: #MAX
+                best_value = float("-inf")
+
+                for child in children:
+                    _, value = self.minimax_alpha_beta(child, 1, remaining_depth - 1, eval_func, alpha, beta)
+
+                    if best_possible is None or value > best_value:
+                        best_possible, best_value = child, value
+
+                    alpha = max(alpha, best_value)
+                    if alpha >= beta: #pruning condition!!!
+                        break
+
+            else:  #MIN
+                best_value = float("inf")
+
+                for child in children:
+                    _, value = self.minimax_alpha_beta(child, 0, remaining_depth - 1, eval_func, alpha, beta)
+
+                    if best_possible is None or value < best_value:
+                        best_possible, best_value = child, value
+
+                    beta = min(beta, best_value)
+                    if alpha >= beta:
+                        break
+
+            return (best_possible, best_value)
+
+    ######################
+
     def search_best_next_move(self, initial_tree_node):
         """
         Use minimax (and extensions) to find best possible next move for player 0 (green boat)
@@ -174,5 +244,10 @@ class PlayerControllerMinimax(PlayerController):
         :rtype: str
         """
 
-        next_node, _ = self.minimax(initial_tree_node, 0, self.max_depth, self.score_distance_eval_func)
+        #next_node, _ = self.minimax(initial_tree_node, 0, self.max_depth, self.score_distance_eval_func)
+        #########ALPHA BETA
+        next_node, _ = self.minimax_alpha_beta(initial_tree_node, 0, self.max_depth, self.score_distance_eval_func)
+        ###############
         return ACTION_TO_STR[next_node.move]
+
+
