@@ -185,7 +185,7 @@ class PlayerControllerMinimax(PlayerController):
 
             return (best_possible, best_value)
 
-    #################ADDED ALPHA BETA PRUNING
+    ################# PART C-> ADDED ALPHA BETA PRUNING
     def minimax_alpha_beta(self, node: Node, player: int, remaining_depth, eval_func, alpha=float("-inf"), beta=float("inf")):
         
         """Select the best move using minimax with a depth cutoff and alpha-beta pruning."""
@@ -238,24 +238,26 @@ class PlayerControllerMinimax(PlayerController):
 
     ######################
 
-    ####################### NEW PART B --> TO MODIFY
+    ####################### NEW PART C --> ALPHA-BETA WITH TIME CONSTRAINT &ITERATIVE DEEPENING
     def minimax_alpha_beta_timed(self, node, player, remaining_depth, eval_func, deadline,alpha=float("-inf"), beta=float("inf")):
         """Run alpha-beta at one depth, checking the deadline at each node.""" 
 
+        # For each node check the time
         if perf_counter() >= deadline:
             raise TimeoutError
 
-        # The game tree ends when no fish or no observations remain.
+        #REMARk:evaluate the position before generating another level, better to do Cut Off BEFORE generating children!
+
+        # Use the score difference (utility) at the end of the game tree.
         if not node.state.get_fish_positions() or node.depth >= len(node.observations):
             return node, self.utility(node)
 
-        # Evaluate the position before generating another level.
+        # At a non-terminal cutoff, give the estimation function instead of the utility.
         if remaining_depth == 0:
             return node, eval_func(node)
 
         children = node.compute_and_get_children()
 
-        # A blocked horizontal move produces the same state as "stay".
         current_x = node.state.get_hook_positions()[player][0]
         children = [
             child for child in children
@@ -268,14 +270,11 @@ class PlayerControllerMinimax(PlayerController):
 
         best_node = None
 
-        if player == 0:  # MAX: green
+        if player == 0: 
             best_value = float("-inf")
 
             for child in children:
-                _, value = self.minimax_alpha_beta_timed(
-                    child, 1, remaining_depth - 1,
-                    eval_func, deadline, alpha, beta
-                )
+                _, value = self.minimax_alpha_beta_timed( child, 1, remaining_depth - 1,eval_func, deadline, alpha, beta)
 
                 if best_node is None or value > best_value:
                     best_node, best_value = child, value
@@ -284,14 +283,11 @@ class PlayerControllerMinimax(PlayerController):
                 if alpha >= beta:
                     break
 
-        else:  # MIN: red
+        else:  
             best_value = float("inf")
 
             for child in children:
-                _, value = self.minimax_alpha_beta_timed(
-                    child, 0, remaining_depth - 1,
-                    eval_func, deadline, alpha, beta
-                )
+                _, value = self.minimax_alpha_beta_timed(child, 0, remaining_depth - 1,eval_func, deadline, alpha, beta)
 
                 if best_node is None or value < best_value:
                     best_node, best_value = child, value
@@ -304,12 +300,11 @@ class PlayerControllerMinimax(PlayerController):
     
     def iterative_deepening(self, node):
 
-        """Return the best move from the last completed search."""
-        # perf_counter measure the time
-        deadline = perf_counter() + 0.060
+        """Return the best child from the last completed depth, or None."""
 
-        # In case even depth 1 cannot finish: if the fish is caught, the hook  goes up by default, otherwise the move is stay
-        best_move = "up" if node.state.get_caught()[0] is not None else "stay"
+        # perf_counter measure the time (with high precisio): each move must be <=75 ms, choose 30 ms to have some time to complete op and give action
+        deadline = perf_counter() + 0.030
+        next_node=None
 
         #try different dephts
         for depth in range(1, len(node.observations) + 1):
@@ -321,9 +316,10 @@ class PlayerControllerMinimax(PlayerController):
             if best_node.move is None:
                 break
 
-            best_move = ACTION_TO_STR[best_node.move]
+            #Save the whole node after this depth is complete.
+            next_node = best_node
 
-        return best_move
+        return next_node
     ######################
 
     def search_best_next_move(self, initial_tree_node):
@@ -336,9 +332,17 @@ class PlayerControllerMinimax(PlayerController):
         :rtype: str
         """
 
+        #MINMAX ALG
         #next_node, _ = self.minimax(initial_tree_node, 0, self.max_depth, self.score_distance_eval_func)
-        #########ALPHA BETA
-        next_node, _ = self.minimax_alpha_beta(initial_tree_node, 0, self.max_depth, self.score_distance_eval_func)
+        #########ALPHA BETA PRUNING
+        #next_node, _ = self.minimax_alpha_beta(initial_tree_node, 0, self.max_depth, self.score_distance_eval_func) #ALPHA BETA
+        
+        #ALPHA BETA PRUNING AND ITERATIVE DEEPENING
+        next_node = self.iterative_deepening(initial_tree_node)
+        if next_node is None:
+            if initial_tree_node.state.get_caught()[0] is not None:
+                return "up" #cought fix-> hook has to go up
+            return "stay" #otherwise stay
         ###############
         return ACTION_TO_STR[next_node.move]
 
